@@ -13,6 +13,7 @@ from logai.analysis.clustering import ClusteringConfig
 from logai.config_interfaces import Config
 from logai.dataloader.data_loader import DataLoaderConfig
 from logai.dataloader.openset_data_loader import OpenSetDataLoaderConfig
+from logai.dataloader.opensearch_set_data_loader import OpenSearchSetDataLoaderConfig
 from logai.information_extraction.categorical_encoder import CategoricalEncoderConfig
 from logai.information_extraction.feature_extractor import FeatureExtractorConfig
 from logai.information_extraction.log_parser import LogParserConfig
@@ -28,6 +29,7 @@ class WorkFlowConfig(Config):
     
     :param data_loader_config: A config object for data loader.
     :param open_set_data_loader_config: A config object for data loader for opensource public log datasets.
+    :param opensearch_set_data_loader_config: A config object for data loader for opensearch index.
     :param preprocessor_config: A config object for log preprocessor.
     :param log_parser_config: A config object for log parser.
     :param log_vectorizer_config: A config object for log vectorizer.
@@ -41,6 +43,7 @@ class WorkFlowConfig(Config):
     """
     data_loader_config: object = None
     open_set_data_loader_config: object = None
+    opensearch_set_data_loader_config: object = None
     preprocessor_config: object = None
 
     log_parser_config: object = None
@@ -54,6 +57,7 @@ class WorkFlowConfig(Config):
     clustering_config: object = None
     workflow_config: object = None
 
+
     @classmethod
     def from_dict(cls, config_dict):
         config = super(WorkFlowConfig, cls).from_dict(config_dict)
@@ -66,6 +70,11 @@ class WorkFlowConfig(Config):
         if config.open_set_data_loader_config:
             config.open_set_data_loader_config = OpenSetDataLoaderConfig.from_dict(
                 config.open_set_data_loader_config
+            )
+
+        if config.opensearch_set_data_loader_config:
+            config.opensearch_set_data_loader_config = OpenSearchSetDataLoaderConfig.from_dict(
+                config.opensearch_set_data_loader_config
             )
 
         if config.preprocessor_config:

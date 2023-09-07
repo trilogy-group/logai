@@ -30,6 +30,19 @@ class DataLoaderConfig(Config):
     datetime_format: str = "%Y-%M-%dT%H:%M:%SZ"  # Default the ISO 8601 format example 2022-05-26T21:29:09+00:00
     open_dataset: str = None
 
+@dataclass
+class OpenSearchDataLoaderConfig(Config):
+    """
+    The configuration class of data loader.
+    """
+
+    filepath: str = ""
+    log_type: str = "csv"
+    dimensions: dict = dict()
+    reader_args: dict = dict()
+    infer_datetime: bool = False
+    datetime_format: str = "%Y-%M-%dT%H:%M:%SZ"  # Default the ISO 8601 format example 2022-05-26T21:29:09+00:00
+    open_dataset: str = None
 
 class FileDataLoader:
     """
@@ -167,3 +180,6 @@ class DefaultDataLoader:
         Initializes default data loader.
         """
         self._logger = logging.Logger()
+
+
+
