@@ -34,7 +34,7 @@ data_loader = OpenSearchDataLoader(
                         {
                             "match":
                             {
-                                "kubernetes.namespace_name": "cdb-prod"
+                                "kubernetes.namespace_name": "cdb-dev"
                             }
                         },
                         {
@@ -42,7 +42,8 @@ data_loader = OpenSearchDataLoader(
                             {
                                 "@timestamp":
                                 {
-                                    "gt": "2023-09-07T04:00:00.0Z"
+                                    "gte": "2023-09-07T22:00:00.000",
+                                    "lte" : "2023-09-07T22:00:30.000"
                                 }
                             }
                         }

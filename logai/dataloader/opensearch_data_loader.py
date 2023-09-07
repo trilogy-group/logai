@@ -28,6 +28,7 @@ class OpenSearchDataLoader():
         Initializes opensearch data loader.
         """
         self._dl_config = get_config(config.dataset_name, "")
+        self._default_page_size = 100
         self._opensearch_config = config
         self._logger = logging.Logger('opensearchdataloader')
         return
@@ -39,9 +40,9 @@ class OpenSearchDataLoader():
 
         df = self.retrieve_data()
         log_messages = []
-        for hit in df['hits']['hits']:
+        for row in df:
             try:
-                match = log_regex.search(hit['_source'][body_field].strip())
+                match = log_regex.search(row['_source'][body_field].strip())
                 message = [match.group(header) for header in headers]
                 log_messages.append(message)
             except Exception as e:
@@ -64,24 +65,36 @@ class OpenSearchDataLoader():
         return headers, regex
 
     def retrieve_data(self):
+        results = []
         try:
             headers = {
                 "Authorization": f"Basic {base64.b64encode(f'{self._opensearch_config.username}:{self._opensearch_config.password}'.encode()).decode()}",
                 "Content-Type": "application/json",
             }
-            opensearch_url = f"{self._opensearch_config.host_name}/{self._opensearch_config.index_name}/_search"
-            if self._opensearch_config.query:
-                response = requests.post(opensearch_url,data=self._opensearch_config.query,headers=headers)
-            else:
-                response = requests.get(opensearch_url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                return data
-            else:
-                self._logger.error(f"Request failed with status code {response.status_code}: {response.text}")
-            return ""
+            total_size = 0
+            pending_to_retrieve = self._default_page_size
+            current_page = 0
+            while pending_to_retrieve > 0:
+                opensearch_url = f"{self._opensearch_config.host_name}/{self._opensearch_config.index_name}/_search?size={self._default_page_size}&from={current_page}"
+                if self._opensearch_config.query:
+                    response = requests.post(opensearch_url,data=self._opensearch_config.query,headers=headers)
+                else:
+                    response = requests.get(opensearch_url, headers=headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    if current_page == 0:
+                        total_size = data['hits']['total']['value']
+                        pending_to_retrieve = total_size
+                        logging.info(f"Total to retrieve: {total_size}")
+                    current_page += self._default_page_size
+                    pending_to_retrieve = pending_to_retrieve - self._default_page_size
+                    logging.info(f"Pending to retrieve: {pending_to_retrieve}")
+                    results.extend(data['hits']['hits'])
+                else:
+                    self._logger.error(f"Request failed with status code {response.status_code}: {response.text}")
         except Exception as e:
             self._logger.error(f"An error occurred: {e}")
+        return results
 
     @property
     def dl_config(self):
