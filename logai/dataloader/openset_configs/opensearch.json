@@ -3,11 +3,17 @@
     "dimensions": {
       "timestamp": ["@timestamp"],
       "body": ["log"],
-      "attributes": ["kubernetes.host"]
+      "attributes": ["Level"],
+      "subattributes":[
+        {
+          "container": "kubernetes",
+          "attributes": ["namespace", "pod_name", "container_name"]
+        }
+      ]
     },
     "infer_datetime": true,
     "datetime_format": "%Y%m%dT%H:%M:%S:%f",
     "reader_args": {
-      "log_format": "<Date> <Time> <Pid> <Level> <Content>"
+      "log_format": "<DateTime> <Descriptor> <Level> <Content>"
     }
   }

@@ -3,6 +3,7 @@ import os.path
 import logging
 import requests
 import base64
+import re
 
 from attr import dataclass
 
@@ -33,10 +34,34 @@ class OpenSearchDataLoader():
 
     def load_data(self):
         kwargs = self._dl_config.reader_args
+        headers, log_regex = self.get_headers_regex(self._dl_config.reader_args['log_format'])
+        body_field = self._dl_config.dimensions['body'][0]
+
         df = self.retrieve_data()
+        log_messages = []
         for hit in df['hits']['hits']:
-            print(hit)
+            try:
+                match = log_regex.search(hit['_source'][body_field].strip())
+                message = [match.group(header) for header in headers]
+                log_messages.append(message)
+            except Exception as e:
+                logging.error('Opensearch row read failed. Exception {}.'.format(e))
         return ""
+
+    def get_headers_regex(self, log_format):
+        headers = []
+        splitters = re.split(r"(<[^<>]+>)", log_format)
+        regex = ""
+        for k in range(len(splitters)):
+            if k % 2 == 0:
+                splitter = re.sub(" +", "\\\s+", splitters[k])
+                regex += splitter
+            else:
+                header = splitters[k].strip("<").strip(">")
+                regex += "(?P<%s>.*?)" % header
+                headers.append(header)
+        regex = re.compile("^" + regex + "$")
+        return headers, regex
 
     def retrieve_data(self):
         try:
