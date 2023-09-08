@@ -43,7 +43,7 @@ data_loader = OpenSearchDataLoader(
                                 "@timestamp":
                                 {
                                     "gte": "2023-09-07T22:00:00.000",
-                                    "lte" : "2023-09-07T22:00:30.000"
+                                    "lte" : "2023-09-07T22:00:20.000"
                                 }
                             }
                         }

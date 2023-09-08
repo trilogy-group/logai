@@ -6,10 +6,13 @@ import base64
 import re
 
 from attr import dataclass
+import pandas as pd
+from logai.utils import constants
 
 from logai.config_interfaces import Config
 from logai.dataloader.data_loader import DataLoaderConfig
 from logai.dataloader.openset_data_loader import get_config
+from logai.dataloader.data_model import LogRecordObject
 
 
 @dataclass
@@ -28,18 +31,21 @@ class OpenSearchDataLoader():
         Initializes opensearch data loader.
         """
         self._dl_config = get_config(config.dataset_name, "")
-        self._default_page_size = 100
+        self._default_page_size = 200
         self._opensearch_config = config
         self._logger = logging.Logger('opensearchdataloader')
         return
 
     def load_data(self):
         kwargs = self._dl_config.reader_args
+        df = self.retrieve_data()
+        logdf = self._read_from_opensearch(df)
+        return self._create_log_record_object(logdf)
+
+    def _read_from_opensearch(self, df):
+        log_messages = []
         headers, log_regex = self.get_headers_regex(self._dl_config.reader_args['log_format'])
         body_field = self._dl_config.dimensions['body'][0]
-
-        df = self.retrieve_data()
-        log_messages = []
         for row in df:
             try:
                 match = log_regex.search(row['_source'][body_field].strip())
@@ -47,7 +53,9 @@ class OpenSearchDataLoader():
                 log_messages.append(message)
             except Exception as e:
                 logging.error('Opensearch row read failed. Exception {}.'.format(e))
-        return ""
+        logdf = pd.DataFrame(log_messages, columns=headers, dtype=str)
+        return logdf
+
 
     def get_headers_regex(self, log_format):
         headers = []
@@ -99,3 +107,35 @@ class OpenSearchDataLoader():
     @property
     def dl_config(self):
         return self._dl_config
+    
+    def _create_log_record_object(self, df: pd.DataFrame):
+        dims = self._dl_config.dimensions
+        log_record = LogRecordObject()
+        if not dims:
+            selected = pd.DataFrame(
+                df.agg(lambda x: " ".join(x.values), axis=1).rename(
+                    constants.LOGLINE_NAME
+                )
+            )
+            setattr(log_record, "body", selected)
+        else:
+            for field in LogRecordObject.__dataclass_fields__:
+                if field in dims.keys():
+                    selected = df[list(dims[field])]
+                    print(field)
+                    if field == "timestamp":
+                        if len(selected.columns) > 1:
+                            selected = pd.DataFrame(
+                                selected.agg(
+                                    lambda x: " ".join(x.values), axis=1
+                                ).rename(constants.LOG_TIMESTAMPS)
+                            )
+                        selected.columns = [constants.LOG_TIMESTAMPS]
+                        if self._dl_config.infer_datetime and self._dl_config.datetime_format:
+                            datetime_format = self._dl_config.datetime_format
+                            selected[constants.LOG_TIMESTAMPS] = pd.to_datetime(
+                                selected[constants.LOG_TIMESTAMPS],
+                                format=datetime_format,
+                            )
+                    setattr(log_record, field, selected)
+        return log_record
