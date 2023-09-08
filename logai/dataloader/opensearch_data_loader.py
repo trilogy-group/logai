@@ -47,17 +47,17 @@ class OpenSearchDataLoader():
         headers, log_regex = self.get_headers_regex(self._dl_config.reader_args['log_format'])
         extended_headers = []
         log_headers = headers[:]
-        if self._dl_config.dimensions['subattributes']:
-            for subattrib in self._dl_config.dimensions['subattributes']:
-                headers.extend(subattrib['attributes'])
-                extended_headers.extend(subattrib['attributes'])
+        if self._dl_config.reader_args['subattributes']:
+            for subattrib in self._dl_config.reader_args['subattributes']:
+                headers.extend(subattrib['attributes'].values())
+                extended_headers.extend(subattrib['attributes'].values())
         body_field = self._dl_config.reader_args['log_field']
         for row in df:
             try:
                 match = log_regex.search(row['_source'][body_field].strip())
                 message = [match.group(header) for header in log_headers]
-                if self._dl_config.dimensions['subattributes']:
-                    for subattrib in self._dl_config.dimensions['subattributes']:
+                if self._dl_config.reader_args['subattributes']:
+                    for subattrib in self._dl_config.reader_args['subattributes']:
                         for attrib in subattrib['attributes']:
                             if attrib in row['_source'][subattrib['container']]:
                                 message.append(row['_source'][subattrib['container']][attrib])
@@ -134,7 +134,6 @@ class OpenSearchDataLoader():
         else:
             for field in LogRecordObject.__dataclass_fields__:
                 if field in dims.keys():
-                    print(field)
                     selected = df[list(dims[field])]
                     if field == "body":
                         if len(selected.columns) > 1:
@@ -145,6 +144,9 @@ class OpenSearchDataLoader():
                             )
                         else:
                             selected.columns = [constants.LOGLINE_NAME]
+                    if field == "labels":
+                        selected.columns = [constants.Field.LABELS]
+
                     if field == "timestamp":
                         if len(selected.columns) > 1:
                             selected = pd.DataFrame(

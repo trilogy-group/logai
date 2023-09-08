@@ -1,18 +1,14 @@
 import os
+
 from logai.dataloader.opensearch_data_loader import OpenSearchSetDataLoaderConfig, OpenSearchDataLoader
 from logai.preprocess.preprocessor import PreprocessorConfig, Preprocessor
-from logai.utils import constants
 from logai.information_extraction.log_parser import LogParser, LogParserConfig
 from logai.algorithms.parsing_algo.drain import DrainParams
-from logai.information_extraction.log_vectorizer import VectorizerConfig, LogVectorizer
-from logai.information_extraction.categorical_encoder import CategoricalEncoderConfig, CategoricalEncoder
+from logai.utils import constants
 from logai.information_extraction.feature_extractor import FeatureExtractorConfig, FeatureExtractor
-from logai.algorithms.clustering_algo.kmeans import KMeansParams
-from logai.analysis.clustering import ClusteringConfig, Clustering
-
-
-#File Configuration
-
+from logai.analysis.anomaly_detector import AnomalyDetector, AnomalyDetectionConfig
+from sklearn.model_selection import train_test_split
+import pandas as pd
 
 dataset_name = "opensearch"
 data_loader = OpenSearchDataLoader(
@@ -53,18 +49,15 @@ data_loader = OpenSearchDataLoader(
         }
         """)
 )
-
 logrecord = data_loader.load_data()
 
-# test1 = list(logrecord.to_dataframe().head(5))
-# print(test1)
+logrecord.to_dataframe().head(5)
+
 loglines = logrecord.body[constants.LOGLINE_NAME]
 attributes = logrecord.attributes
 preprocessor_config = PreprocessorConfig(
     custom_replace_list=[
-        [r"(?<=blk_)[-\d]+", "<block_id>"],
-        [r"\d+\.\d+\.\d+\.\d+", "<IP>"],
-        [r"(/[-\w]+)+", "<file_path>"],
+        [r"\d+\.\d+\.\d+\.\d+", "<IP>"],   # retrieve all IP addresses and replace with <IP> tag in the original string.
     ]
 )
 
@@ -89,48 +82,54 @@ parsed_result = parser.parse(clean_logs)
 
 parsed_loglines = parsed_result['parsed_logline']
 
-vectorizer_config = VectorizerConfig(
-    algo_name = "word2vec"
-)
-
-vectorizer = LogVectorizer(
-    vectorizer_config
-)
-
-# Train vectorizer
-vectorizer.fit(parsed_loglines)
-
-# Transform the loglines into features
-log_vectors = vectorizer.transform(parsed_loglines)
-
-encoder_config = CategoricalEncoderConfig(name="label_encoder")
-
-encoder = CategoricalEncoder(encoder_config)
-
-attributes_encoded = encoder.fit_transform(attributes)
-
-timestamps = logrecord.timestamp['timestamp']
-
 config = FeatureExtractorConfig(
-    max_feature_len=100
+    group_by_time="15min",
+    group_by_category=['parsed_logline', 'PodName', 'ContainerName'],
 )
 
 feature_extractor = FeatureExtractor(config)
 
-_, feature_vector = feature_extractor.convert_to_feature_vector(log_vectors, attributes_encoded, timestamps)
-
-clustering_config = ClusteringConfig(
-    algo_name='kmeans',
-    algo_params=KMeansParams(
-        n_clusters=7
-    )
+timestamps = logrecord.timestamp['timestamp']
+parsed_loglines = parsed_result['parsed_logline']
+counter_vector = feature_extractor.convert_to_counter_vector(
+    log_pattern=parsed_loglines,
+    attributes=attributes,
+    timestamps=timestamps
 )
 
-log_clustering = Clustering(clustering_config)
+counter_vector.head(5)
+#----------------------------------------------------------------------------
+counter_vector["attribute"] = counter_vector.drop(
+                [
+                    constants.LOG_COUNTS,
+                    constants.LOG_TIMESTAMPS,
+                    constants.EVENT_INDEX
+                ],
+                axis=1
+            ).apply(
+                lambda x: "-".join(x.astype(str)), axis=1
+            )
 
-log_clustering.fit(feature_vector)
+attr_list = counter_vector["attribute"].unique()
 
-cluster_id = log_clustering.predict(feature_vector).astype(str).rename('cluster_id')
+anomaly_detection_config = AnomalyDetectionConfig(
+    algo_name='dbl'
+)
 
-dump1 = logrecord.to_dataframe().join(cluster_id).head(5)
-print(dump1)
+res = pd.DataFrame()
+for attr in attr_list:
+    temp_df = counter_vector[counter_vector["attribute"] == attr]
+    if temp_df.shape[0] >= constants.MIN_TS_LENGTH:
+        train, test = train_test_split(
+            temp_df[[constants.LOG_TIMESTAMPS, constants.LOG_COUNTS]],
+            shuffle=False,
+            train_size=0.3
+        )
+        anomaly_detector = AnomalyDetector(anomaly_detection_config)
+        anomaly_detector.fit(train)
+        anom_score = anomaly_detector.predict(test)
+        res = res.append(anom_score)
+
+# Get anomalous datapoints
+anomalies = counter_vector.iloc[res[res>0].index]
+print(anomalies.head(5))

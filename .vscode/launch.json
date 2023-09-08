@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Debug Test05",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/load_test05.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Debug Test04",
             "type": "python",
             "request": "launch",
