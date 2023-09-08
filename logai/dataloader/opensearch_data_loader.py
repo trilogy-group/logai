@@ -45,11 +45,24 @@ class OpenSearchDataLoader():
     def _read_from_opensearch(self, df):
         log_messages = []
         headers, log_regex = self.get_headers_regex(self._dl_config.reader_args['log_format'])
-        body_field = self._dl_config.dimensions['body'][0]
+        extended_headers = []
+        log_headers = headers[:]
+        if self._dl_config.dimensions['subattributes']:
+            for subattrib in self._dl_config.dimensions['subattributes']:
+                headers.extend(subattrib['attributes'])
+                extended_headers.extend(subattrib['attributes'])
+        body_field = self._dl_config.reader_args['log_field']
         for row in df:
             try:
                 match = log_regex.search(row['_source'][body_field].strip())
-                message = [match.group(header) for header in headers]
+                message = [match.group(header) for header in log_headers]
+                if self._dl_config.dimensions['subattributes']:
+                    for subattrib in self._dl_config.dimensions['subattributes']:
+                        for attrib in subattrib['attributes']:
+                            if attrib in row['_source'][subattrib['container']]:
+                                message.append(row['_source'][subattrib['container']][attrib])
+                            else:
+                                message.append('')
                 log_messages.append(message)
             except Exception as e:
                 logging.error('Opensearch row read failed. Exception {}.'.format(e))
@@ -107,7 +120,7 @@ class OpenSearchDataLoader():
     @property
     def dl_config(self):
         return self._dl_config
-    
+
     def _create_log_record_object(self, df: pd.DataFrame):
         dims = self._dl_config.dimensions
         log_record = LogRecordObject()
@@ -121,8 +134,17 @@ class OpenSearchDataLoader():
         else:
             for field in LogRecordObject.__dataclass_fields__:
                 if field in dims.keys():
-                    selected = df[list(dims[field])]
                     print(field)
+                    selected = df[list(dims[field])]
+                    if field == "body":
+                        if len(selected.columns) > 1:
+                            selected = pd.DataFrame(
+                                selected.agg(
+                                    lambda x: " ".join(x.values), axis=1
+                                ).rename(constants.LOGLINE_NAME)
+                            )
+                        else:
+                            selected.columns = [constants.LOGLINE_NAME]
                     if field == "timestamp":
                         if len(selected.columns) > 1:
                             selected = pd.DataFrame(

@@ -2,18 +2,19 @@
     "log_type": "log",
     "dimensions": {
       "timestamp": ["DateTime"],
-      "body": ["log"],
+      "body": ["Content"],
       "attributes": ["Level"],
       "subattributes":[
         {
           "container": "kubernetes",
-          "attributes": ["namespace", "pod_name", "container_name"]
+          "attributes": ["namespace_name", "pod_name", "container_name"]
         }
       ]
     },
     "infer_datetime": true,
     "datetime_format": "%Y-%m-%dT%H:%M:%S.%fZ",
     "reader_args": {
+      "log_field": "log",
       "log_format": "<DateTime> <Descriptor> <Level> <Content>"
     }
   }
