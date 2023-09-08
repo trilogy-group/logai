@@ -9,6 +9,11 @@ from logai.information_extraction.feature_extractor import FeatureExtractorConfi
 from logai.analysis.anomaly_detector import AnomalyDetector, AnomalyDetectionConfig
 from sklearn.model_selection import train_test_split
 import pandas as pd
+from logai.information_extraction.log_vectorizer import VectorizerConfig, LogVectorizer
+from logai.information_extraction.categorical_encoder import CategoricalEncoderConfig, CategoricalEncoder
+from logai.information_extraction.feature_extractor import FeatureExtractorConfig, FeatureExtractor
+from logai.algorithms.anomaly_detection_algo.isolation_forest import IsolationForestParams
+from logai.analysis.anomaly_detector import AnomalyDetectionConfig, AnomalyDetector
 
 dataset_name = "opensearch"
 data_loader = OpenSearchDataLoader(
@@ -21,29 +26,33 @@ data_loader = OpenSearchDataLoader(
         password='we<3kube',
         query="""
         {
-            "query":
-            {
-                "bool":
-                {
-                    "must":
-                    [
-                        {
-                            "match":
-                            {
-                                "kubernetes.namespace_name": "cdb-dev"
-                            }
-                        },
-                        {
-                            "range":
-                            {
-                                "@timestamp":
-                                {
-                                    "gte": "2023-09-07T22:00:00.000",
-                                    "lte" : "2023-09-07T22:00:20.000"
-                                }
+            "query": {
+                "bool": {
+        	        "filter":{
+				        "range":{
+                            "@timestamp":{
+                                "gte": "2023-09-07T22:00:00.000",
+                                "lte" : "2023-09-07T22:20:00.000"
                             }
                         }
-                    ]
+        	        },
+        	        "should": [
+        		        {
+        			        "match": {
+        				        "kubernetes.namespace_name": "cdb-dev"
+        			        }
+        		        },
+        		        {
+        			        "match": {
+        				        "kubernetes.namespace_name": "cdb-prod"
+        			        }
+        		        },
+        		        {
+        			        "match": {
+        				        "kubernetes.namespace_name": "placeable-prod"
+        			        }
+        		        }
+        	        ]
                 }
             }
         }
@@ -133,3 +142,62 @@ for attr in attr_list:
 # Get anomalous datapoints
 anomalies = counter_vector.iloc[res[res>0].index]
 print(anomalies.head(5))
+
+#-----------------------------------------------------------------------------------------
+
+
+vectorizer_config = VectorizerConfig(
+    algo_name = "word2vec"
+)
+
+vectorizer = LogVectorizer(
+    vectorizer_config
+)
+
+# Train vectorizer
+vectorizer.fit(parsed_loglines)
+
+# Transform the loglines into features
+log_vectors = vectorizer.transform(parsed_loglines)
+
+
+encoder_config = CategoricalEncoderConfig(name="label_encoder")
+
+encoder = CategoricalEncoder(encoder_config)
+
+attributes_encoded = encoder.fit_transform(attributes)
+
+timestamps = logrecord.timestamp['timestamp']
+
+config = FeatureExtractorConfig(
+    max_feature_len=100
+)
+
+feature_extractor = FeatureExtractor(config)
+
+_, feature_vector = feature_extractor.convert_to_feature_vector(log_vectors, attributes_encoded, timestamps)
+
+from sklearn.model_selection import train_test_split
+
+train, test = train_test_split(feature_vector, train_size=0.7, test_size=0.3)
+
+
+algo_params = IsolationForestParams(
+    n_estimators=10,
+    max_features=100
+)
+config = AnomalyDetectionConfig(
+    algo_name='isolation_forest',
+    algo_params=algo_params
+)
+
+anomaly_detector = AnomalyDetector(config)
+anomaly_detector.fit(train)
+res = anomaly_detector.predict(test)
+# obtain the anomalous datapoints
+anomalies = res[res==1]
+
+print(loglines.iloc[anomalies.index].head(5))
+print(attributes.iloc[anomalies.index].head(5))
+
+print('_______________________________________________')
