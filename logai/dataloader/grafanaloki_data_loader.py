@@ -47,23 +47,36 @@ class GrafanaLokiDataLoader():
 
     def retrieve_data(self):
         results = []
-        headers = self._get_auth_headers()
-        #url = url.rstrip('?') + '?' + urlencode(params, doseq=True)
-        #limit
-        start_time_ms = int(self._grafanaloki_config.start_time.timestamp()) * 1000
-        end_time_ms = int(self._grafanaloki_config.end_time.timestamp()) * 1000
+        lapses = self._get_timestamp_ranges(self._grafanaloki_config.start_time, self._grafanaloki_config.end_time)
+        for lapse in lapses:
+            resp_data = self._get_data_from_range(lapse[0], lapse[1], 5000)
+            results.append(resp_data)
+        return results
 
+    def _get_data_from_range(self, start_time, end_time, limit):
+        headers = self._get_auth_headers()
         request_params = {
             "query": self._grafanaloki_config.query,
-            "start": int(self._grafanaloki_config.start_time.timestamp()),
-            "end": int(self._grafanaloki_config.end_time.timestamp()),
+            "start": int(start_time.timestamp()),
+            "end": int(end_time.timestamp()),
+            "limit": limit,
         }
         resp_data = requests.get(f"{self._grafanaloki_config.host_name}:{self._grafanaloki_config.port}/loki/api/v1/query_range", headers=headers,params=request_params)
         if resp_data.status_code != 200:
             self._logger.error(f"Error getting the data {self._grafanaloki_config.host_name}:{self._grafanaloki_config.port} - status code {resp_data.status_code}")
-            return results
-        data = resp_data.json()
-        return results
+            return None
+        return resp_data.json()
+
+
+    def _get_timestamp_ranges(self,start_time, end_time):
+        interval = timedelta(seconds=5)
+        time_intervals = []
+        current_time = start_time
+        while current_time < end_time:
+            next_time = current_time + interval
+            time_intervals.append((current_time, next_time))
+            current_time = next_time
+        return time_intervals
 
     def _create_log_record_object(self, df: pd.DataFrame):
         log_record = LogRecordObject()
