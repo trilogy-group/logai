@@ -1,0 +1,24 @@
+{
+    "log_type": "log",
+    "dimensions": {
+      "timestamp": ["DateTime"],
+      "body": ["Content"],
+      "attributes": ["Level", "Namespace", "PodName", "ContainerName"]
+    },
+    "infer_datetime": true,
+    "datetime_format": "%Y-%m-%dT%H:%M:%S.%fZ",
+    "reader_args": {
+      "log_field": "log",
+      "log_format": "<DateTime> <Descriptor> <Level> <Content>",
+      "subattributes":[
+        {
+          "container": "kubernetes",
+          "attributes": {
+            "namespace_name": "Namespace",
+            "pod_name": "PodName",
+            "container_name": "ContainerName"
+          }
+        }
+      ]
+    }
+  }
